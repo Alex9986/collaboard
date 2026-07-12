@@ -20,11 +20,11 @@ export async function GET(
 
     const room = result.data[0]
 
-    // Check for stale users (inactive > 60s)
+    // Check for stale users (inactive > 90s)
     const now = Date.now()
-    const staleTimeout = 60_000
+    const staleTimeout = 90_000
     const activeUsers = (room.users || []).filter(
-      (u: { lastActive: number }) => now - u.lastActive < staleTimeout
+      (u: { lastActive: number }) => now - u.lastActive <= staleTimeout
     )
 
     // If users changed, update the document
@@ -84,13 +84,24 @@ export async function PUT(
         u.name === trimmedName ? { ...u, lastActive: now } : u
     )
 
-    await collection.doc(doc._id).update({
-      code,
-      users: updatedUsers,
-      lastUpdated: now,
-    })
+    // Optimistic concurrency: only update if lastUpdated hasn't changed since we read it
+    const updateResult = await collection
+      .where({ roomId, lastUpdated: doc.lastUpdated })
+      .update({
+        code,
+        users: updatedUsers,
+        lastUpdated: now,
+      })
 
-    return NextResponse.json({ success: true })
+    // If 0 documents matched, someone else wrote in between — reject so client retries
+    if (updateResult.updated === 0) {
+      return NextResponse.json(
+        { error: 'Conflict — document was modified since last read. Retry.' },
+        { status: 409 }
+      )
+    }
+
+    return NextResponse.json({ success: true, lastUpdated: now })
   } catch (error) {
     console.error('Update room error:', error)
     return NextResponse.json(

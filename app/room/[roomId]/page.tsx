@@ -29,6 +29,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const putTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingRef = useRef(false) // true while user is actively typing
+  const putGenRef = useRef(0) // generation counter to prevent stale PUT callbacks
 
   // Get nickname
   useEffect(() => {
@@ -111,23 +112,61 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     }
   }, [roomId])
 
+  // Send heartbeat immediately when tab becomes visible again (browser
+  // throttles setInterval in background tabs, risking stale eviction)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && nickname.current) {
+        fetch(`/api/rooms/${roomId}/heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: nickname.current }),
+        }).catch(() => {})
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [roomId])
+
   const handleCodeChange = useCallback((value: string) => {
     setCode(value)
     localCodeRef.current = value
     typingRef.current = true
 
+    // Bump the generation counter so stale PUT callbacks won't reset typingRef
+    const gen = ++putGenRef.current
+
     // Debounce: only send PUT after user pauses typing
     if (putTimerRef.current) clearTimeout(putTimerRef.current)
     putTimerRef.current = setTimeout(async () => {
-      typingRef.current = false
-      try {
-        await fetch(`/api/rooms/${roomId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: localCodeRef.current, name: nickname.current }),
-        })
-      } catch {
-        // Silent fail - next poll will sync
+      // Retry up to 3 times on 409 conflict from concurrent writes
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await fetch(`/api/rooms/${roomId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: localCodeRef.current, name: nickname.current }),
+          })
+          if (res.status === 409) {
+            // Conflict — brief backoff then retry with current local code
+            await new Promise((r) => setTimeout(r, 200 * (attempt + 1)))
+            continue
+          }
+          break
+        } catch {
+          // Network error — retry
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 200 * (attempt + 1)))
+            continue
+          }
+        }
+      }
+      // Only reset typing guard if no new keystroke happened during PUT
+      if (putGenRef.current === gen) {
+        typingRef.current = false
       }
     }, PUT_DEBOUNCE)
   }, [roomId])
@@ -178,6 +217,11 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
 
       <div className="flex items-center justify-between px-4 py-2 bg-gray-900 border-t border-gray-800">
         <RoomStatus isConnected={isConnected} lastSync={lastSync} />
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-gray-500">{t.supportedLanguages}:</span>
+          <span className="px-2 py-0.5 bg-gray-800 text-yellow-400 rounded font-mono">JS</span>
+          <span className="px-2 py-0.5 bg-gray-800 text-blue-400 rounded font-mono">TS</span>
+        </div>
         <span className="text-gray-500 text-xs">
           {t.editingAs}: {nickname.current}
         </span>

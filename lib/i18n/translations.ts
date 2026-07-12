@@ -27,6 +27,7 @@ export interface Translations {
   invalidRoomId: string
   startCoding: string
   language: string
+  supportedLanguages: string
 }
 
 export const translations: Record<Language, Translations> = {
@@ -57,6 +58,7 @@ export const translations: Record<Language, Translations> = {
     invalidRoomId: '房间号需为3-20位字母或数字',
     startCoding: '// 开始编码...',
     language: '语言',
+    supportedLanguages: '支持语言',
   },
   en: {
     title: 'Collaboard - Collaborative Code Editor',
@@ -85,5 +87,6 @@ export const translations: Record<Language, Translations> = {
     invalidRoomId: 'Room ID must be 3-20 alphanumeric characters',
     startCoding: '// Start coding...',
     language: 'Language',
+    supportedLanguages: 'Supported',
   },
 }

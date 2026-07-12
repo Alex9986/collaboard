@@ -24,10 +24,17 @@ export async function POST(
     const now = Date.now()
     const trimmedName = name?.trim() || 'anonymous'
 
-    const updatedUsers = (doc.users || []).map(
-      (u: { name: string }) =>
-        u.name === trimmedName ? { ...u, lastActive: now } : u
+    // Update existing user's lastActive, or re-add if evicted by stale cleanup
+    const users = doc.users || []
+    const existingIndex = users.findIndex(
+      (u: { name: string }) => u.name === trimmedName
     )
+    const updatedUsers =
+      existingIndex >= 0
+        ? users.map((u: { name: string }, i: number) =>
+            i === existingIndex ? { ...u, lastActive: now } : u
+          )
+        : [...users, { name: trimmedName, lastActive: now }]
 
     await collection.doc(doc._id).update({ users: updatedUsers })
 
