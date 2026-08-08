@@ -1,9 +1,9 @@
 'use client'
 
-import { UserInfo } from '@/lib/cloudbase'
+import { RoomMember } from '@/lib/cloudbase'
 
 interface UserAvatarsProps {
-  users: UserInfo[]
+  users: RoomMember[]
 }
 
 export default function UserAvatars({ users }: UserAvatarsProps) {
@@ -22,7 +22,7 @@ export default function UserAvatars({ users }: UserAvatarsProps) {
     <div className="flex items-center gap-1.5">
       {users.map((user, index) => (
         <div
-          key={user.name}
+          key={user.id}
           className={`w-7 h-7 rounded-full ${getColor(user.name, index)} flex items-center justify-center text-xs font-semibold text-white`}
           title={`${user.name} (active)`}
         >

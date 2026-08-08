@@ -12,7 +12,6 @@ export interface Translations {
   copied: string
   room: string
   online: string
-  newRoom: string
   leave: string
   connected: string
   disconnected: string
@@ -43,7 +42,6 @@ export const translations: Record<Language, Translations> = {
     copied: '已复制',
     room: '房间',
     online: '在线',
-    newRoom: '新房间',
     leave: '离开',
     connected: '已连接',
     disconnected: '已断开',
@@ -72,7 +70,6 @@ export const translations: Record<Language, Translations> = {
     copied: 'Copied',
     room: 'Room',
     online: 'online',
-    newRoom: 'New Room',
     leave: 'Leave',
     connected: 'Connected',
     disconnected: 'Disconnected',

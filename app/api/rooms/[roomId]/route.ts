@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, RoomResponse } from '@/lib/cloudbase'
+import { getPusher, roomChannel } from '@/lib/pusher'
 
 export async function GET(
   request: NextRequest,
@@ -20,21 +21,8 @@ export async function GET(
 
     const room = result.data[0]
 
-    // Check for stale users (inactive > 90s)
-    const now = Date.now()
-    const staleTimeout = 90_000
-    const activeUsers = (room.users || []).filter(
-      (u: { lastActive: number }) => now - u.lastActive <= staleTimeout
-    )
-
-    // If users changed, update the document
-    if (activeUsers.length !== (room.users || []).length) {
-      await collection.doc(room._id).update({ users: activeUsers })
-    }
-
     const response: RoomResponse = {
       code: room.code,
-      users: activeUsers,
       lastUpdated: room.lastUpdated,
     }
 
@@ -54,7 +42,7 @@ export async function PUT(
 ) {
   try {
     const { roomId } = await params
-    const { code, name } = await request.json()
+    const { code } = await request.json()
 
     if (typeof code !== 'string') {
       return NextResponse.json(
@@ -76,20 +64,12 @@ export async function PUT(
 
     const doc = result.data[0]
     const now = Date.now()
-    const trimmedName = name?.trim() || 'anonymous'
-
-    // Update code and user's lastActive
-    const updatedUsers = (doc.users || []).map(
-      (u: { name: string }) =>
-        u.name === trimmedName ? { ...u, lastActive: now } : u
-    )
 
     // Optimistic concurrency: only update if lastUpdated hasn't changed since we read it
     const updateResult = await collection
       .where({ roomId, lastUpdated: doc.lastUpdated })
       .update({
         code,
-        users: updatedUsers,
         lastUpdated: now,
       })
 
@@ -99,6 +79,16 @@ export async function PUT(
         { error: 'Conflict — document was modified since last read. Retry.' },
         { status: 409 }
       )
+    }
+
+    // Push the new code to everyone in the room. If this fails the DB write is
+    // still the source of truth — clients resync via GET on reconnect.
+    const pusher = getPusher()
+    if (pusher) {
+      await pusher.trigger(roomChannel(roomId), 'code-updated', {
+        code,
+        lastUpdated: now,
+      })
     }
 
     return NextResponse.json({ success: true, lastUpdated: now })

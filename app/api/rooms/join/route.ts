@@ -19,47 +19,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const trimmedName = name.trim()
-    const now = Date.now()
     const db = getDb()
     const collection = db.collection('rooms')
 
     // Query existing room
     const result = await collection.where({ roomId }).get()
 
+    let room: { code: string; lastUpdated: number }
+
     if (result.data.length === 0) {
       // Create new room
+      const now = Date.now()
       await collection.add({
         roomId,
         code: '// Start coding...',
-        users: [{ name: trimmedName, lastActive: now }],
         createdAt: now,
         lastUpdated: now,
       })
+      room = { code: '// Start coding...', lastUpdated: now }
     } else {
-      // Join existing room
-      const doc = result.data[0]
-      const existingUsers = doc.users || []
-
-      // Remove duplicate if same name exists, then add
-      const updatedUsers = [
-        ...existingUsers.filter((u: { name: string }) => u.name !== trimmedName),
-        { name: trimmedName, lastActive: now },
-      ]
-
-      await collection.doc(doc._id).update({
-        users: updatedUsers,
-        lastUpdated: now,
-      })
+      room = result.data[0]
     }
-
-    // Fetch the room to return
-    const roomResult = await collection.where({ roomId }).get()
-    const room = roomResult.data[0]
 
     const response: RoomResponse = {
       code: room.code,
-      users: room.users,
       lastUpdated: room.lastUpdated,
     }
 

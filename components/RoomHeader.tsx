@@ -1,14 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { UserInfo } from '@/lib/cloudbase'
+import { RoomMember } from '@/lib/cloudbase'
 import { useLanguage } from '@/lib/i18n/LanguageContext'
 import LanguageToggle from './LanguageToggle'
 import UserAvatars from './UserAvatars'
 
 interface RoomHeaderProps {
   roomId: string
-  users: UserInfo[]
+  users: RoomMember[]
   onLeave: () => void
 }
 
@@ -32,11 +32,6 @@ export default function RoomHeader({ roomId, users, onLeave }: RoomHeaderProps) 
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     }
-  }
-
-  const generateNewRoom = () => {
-    const newRoomId = Math.random().toString(36).substring(2, 8)
-    window.location.href = `/room/${newRoomId}`
   }
 
   return (
@@ -68,12 +63,6 @@ export default function RoomHeader({ roomId, users, onLeave }: RoomHeaderProps) 
       <div className="flex items-center gap-4">
         <UserAvatars users={users} />
         <span className="text-gray-400 text-sm">{users.length} {t.online}</span>
-        <button
-          onClick={generateNewRoom}
-          className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md transition-colors"
-        >
-          {t.newRoom}
-        </button>
         <LanguageToggle />
         <button
           onClick={onLeave}

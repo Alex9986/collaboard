@@ -10,15 +10,23 @@ export interface RoomDocument {
   _id: string
   roomId: string
   code: string
-  users: UserInfo[]
+  /** Kept for backward compatibility; presence is now handled by Pusher. */
+  users?: UserInfo[]
   createdAt: number
   lastUpdated: number
 }
 
 export interface RoomResponse {
   code: string
-  users: UserInfo[]
   lastUpdated: number
+}
+
+/** A member currently present in a room, sourced from the Pusher presence channel. */
+export interface RoomMember {
+  /** Unique Pusher presence member id (user_id). */
+  id: string
+  /** Display name, from user_info.name. */
+  name: string
 }
 
 let cachedApp: CloudBase | null = null
