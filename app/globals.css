@@ -24,3 +24,49 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Realtime remote cursor rendering (Google Docs style) */
+.cm-remote-cursor-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin: 0 -1px; /* visually center the 2px bar on the caret position */
+  border-radius: 1px;
+  background-color: var(--cursor-color);
+  box-shadow: 0 0 3px var(--cursor-color);
+  vertical-align: -0.2em;
+  pointer-events: none;
+}
+
+/* Translucent highlight over the character under a remote caret */
+.cm-remote-cursor-char {
+  border-radius: 2px;
+}
+
+/* Remote selection highlight */
+.cm-remote-selection {
+  border-radius: 2px;
+}
+
+/* Name chips in the left gutter, aligned with the cursor's line */
+.cm-remote-names {
+  background-color: transparent;
+}
+
+.cm-remote-names .cm-gutterElement {
+  display: flex;
+  align-items: center;
+  padding: 0;
+}
+
+.cm-remote-name-chip {
+  display: inline-block;
+  margin: 0 4px;
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 1.5;
+  border-radius: 10px;
+  color: #fff;
+  white-space: nowrap;
+  pointer-events: none;
+}

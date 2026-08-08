@@ -7,8 +7,17 @@ import RoomHeader from '@/components/RoomHeader'
 import RoomStatus from '@/components/RoomStatus'
 import { useLanguage } from '@/lib/i18n/LanguageContext'
 import type { RoomMember } from '@/lib/cloudbase'
+import type { PresenceChannel } from 'pusher-js'
+import {
+  applyRemoteCursor,
+  clearRemoteCursors,
+  remoteCursorColor,
+  removeRemoteCursor,
+} from '@/lib/remoteCursors'
+import type { EditorView } from '@codemirror/view'
 
 const PUT_DEBOUNCE = 500 // ms to wait after last keystroke before syncing
+const CURSOR_REPORT_INTERVAL = 150 // ms; Pusher client-event rate limit
 
 type ErrorKind = 'room-closed' | 'connection-lost'
 
@@ -33,6 +42,14 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   const putTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingRef = useRef(false) // true while user is actively typing
   const putGenRef = useRef(0) // generation counter to prevent stale PUT callbacks
+
+  // Remote cursor plumbing. Cursor updates go straight to the editor view,
+  // bypassing React state so they don't re-render the whole page.
+  const editorViewRef = useRef<EditorView | null>(null)
+  const channelRef = useRef<PresenceChannel | null>(null) // current Pusher presence channel
+  const lastCursorSentRef = useRef(0)
+  const pendingCursorRef = useRef<{ from: number; to: number; docLength: number } | null>(null)
+  const cursorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Get nickname
   useEffect(() => {
@@ -72,6 +89,48 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     }
   }, [roomId])
 
+  // Report our cursor position to the room, throttled to stay under Pusher's
+  // client-event rate limit. docLength is the sender's document length at send
+  // time; receivers use it to correct for the sync lag between peers.
+  const handleCursorChange = useCallback(
+    (from: number, to: number, docLength: number) => {
+      const channel = channelRef.current
+      if (!channel) return
+
+      const send = (f: number, t: number) => {
+        channel.trigger('client-cursor', {
+          from: f,
+          to: t,
+          name: nickname.current,
+          docLen: docLength,
+        })
+        lastCursorSentRef.current = Date.now()
+      }
+
+      const now = Date.now()
+      if (now - lastCursorSentRef.current >= CURSOR_REPORT_INTERVAL) {
+        if (cursorTimerRef.current) {
+          clearTimeout(cursorTimerRef.current)
+          cursorTimerRef.current = null
+        }
+        send(from, to)
+      } else {
+        pendingCursorRef.current = { from, to, docLength }
+        if (!cursorTimerRef.current) {
+          cursorTimerRef.current = setTimeout(() => {
+            cursorTimerRef.current = null
+            if (pendingCursorRef.current) {
+              const pending = pendingCursorRef.current
+              send(pending.from, pending.to)
+              pendingCursorRef.current = null
+            }
+          }, CURSOR_REPORT_INTERVAL - (now - lastCursorSentRef.current))
+        }
+      }
+    },
+    []
+  )
+
   // Connect to Pusher: presence (who's online) + code-updated broadcasts.
   // Replaces the old 1.5s polling + 30s heartbeat + visibilitychange logic.
   useEffect(() => {
@@ -110,6 +169,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
       })
 
       channel = pusher.subscribe(`presence-room-${roomId}`)
+      channelRef.current = channel
 
       channel.bind(
         'pusher:subscription_succeeded',
@@ -124,6 +184,9 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
               name: info?.name ?? id,
             }))
           )
+          // Re-subscribed: drop cursors whose senders may be gone; they
+          // re-appear as those members move their cursors again.
+          clearRemoteCursors(editorViewRef.current)
         }
       )
       channel.bind(
@@ -140,6 +203,41 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         'pusher:member_removed',
         (member: { id: string; info?: { name?: string } }) => {
           setUsers((prev) => prev.filter((u) => u.id !== member.id))
+          removeRemoteCursor(editorViewRef.current, member.id)
+        }
+      )
+
+      // Remote cursor/selection updates. On presence channels Pusher passes
+      // the sender's user_id as the event's second argument (metadata).
+      channel.bind(
+        'client-cursor',
+        (
+          data: { from?: number; to?: number; name?: string; docLen?: number },
+          metadata: { user_id?: string }
+        ) => {
+          if (disposed) return
+          const userId = metadata.user_id
+          if (!userId || typeof data.from !== 'number' || typeof data.to !== 'number') {
+            return
+          }
+          const view = editorViewRef.current
+          if (!view) return
+
+          // If the sender's document is longer than ours, they have edits we
+          // haven't received yet. Those edits sit right before their cursor
+          // (they're typing), so shift the cursor left by the delta to land on
+          // the correct spot in our document.
+          const docLen = view.state.doc.length
+          const senderLen = typeof data.docLen === 'number' ? data.docLen : docLen
+          const delta = Math.max(0, senderLen - docLen)
+
+          applyRemoteCursor(view, {
+            userId,
+            name: data.name || userId,
+            color: remoteCursorColor(userId),
+            from: data.from - delta,
+            to: data.to - delta,
+          })
         }
       )
 
@@ -166,6 +264,8 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
       disposed = true
       if (channel) channel.unbind_all()
       if (pusher) pusher.disconnect()
+      channelRef.current = null
+      clearRemoteCursors(editorViewRef.current)
     }
   }, [roomId, fetchRoom])
 
@@ -218,6 +318,14 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     router.push('/')
   }
 
+  // Clear the pending cursor send timer on unmount.
+  useEffect(
+    () => () => {
+      if (cursorTimerRef.current) clearTimeout(cursorTimerRef.current)
+    },
+    []
+  )
+
   if (error === 'room-closed') {
     return (
       <main className="flex flex-1 items-center justify-center bg-gray-950">
@@ -248,6 +356,10 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
           <CodeMirrorEditor
             value={code}
             onChange={handleCodeChange}
+            onCreateView={(view) => {
+              editorViewRef.current = view
+            }}
+            onCursorChange={handleCursorChange}
           />
         )}
       </div>
