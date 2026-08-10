@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Collaboard - 多人实时协同代码编辑器
 
-## Getting Started
+Collaboard 是一个基于 Web 的多人实时协同代码编辑器。输入昵称并创建一个房间号（或加入已有房间），即可与其他人一起实时编辑同一份代码，并看到彼此的在线状态和光标位置。
 
-First, run the development server:
+## 功能特性
+
+- **实时协同编辑**：基于 Pusher 实时通道，输入内容在多人之间实时同步
+- **远程光标与选区**：实时显示其他成员的光标和选中区域，并区分不同颜色
+- **在线成员列表**：通过 Pusher presence 通道展示当前房间内的在线用户
+- **房间机制**：生成或输入房间号即可加入，无需注册登录
+- **自动保存**：输入自动防抖同步，冲突时自动重试，掉线重连后自动重新拉取最新内容
+- **代码编辑器**：基于 CodeMirror 6，支持 JavaScript / TypeScript，暗色主题
+- **中英文界面**：内置 zh / en 双语切换
+
+## 技术栈
+
+- [Next.js](https://nextjs.org) 16（App Router）+ React 19 + TypeScript
+- [CodeMirror 6](https://codemirror.net)（`@uiw/react-codemirror`）编辑器
+- [Pusher](https://pusher.com) 实时消息（presence 通道 + 客户端事件）
+- [CloudBase](https://cloud.tencent.com/product/tcb)（腾讯云开发）存储房间代码
+- [Tailwind CSS](https://tailwindcss.com) 4 样式
+
+## 环境变量
+
+项目依赖以下环境变量，缺少 Pusher 或 CloudBase 配置时应用会降级运行（编辑器仍可用，但无法实时同步/持久化）：
+
+| 变量 | 说明 |
+| --- | --- |
+| `NEXT_PUBLIC_PUSHER_KEY` | Pusher 应用 key（客户端） |
+| `NEXT_PUBLIC_PUSHER_CLUSTER` | Pusher 集群（客户端） |
+| `PUSHER_APP_ID` | Pusher 应用 ID（服务端） |
+| `PUSHER_SECRET` | Pusher 密钥（服务端） |
+| `CLOUDBASE_ENV_ID` | CloudBase 环境 ID |
+| `CLOUDBASE_API_KEY` | CloudBase 访问密钥 |
+
+复制 `.env.example` 为 `.env.local` 并填入对应值（首次使用请先在 [Pusher](https://pusher.com) 和 [腾讯云开发](https://cloud.tencent.com/product/tcb) 创建应用）。
+
+## 快速开始
+
+首先，安装依赖并启动开发服务器：
 
 ```bash
+npm install
 npm run dev
-# or
+# 或
 yarn dev
-# or
+# 或
 pnpm dev
-# or
+# 或
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+用浏览器打开 [http://localhost:3000](http://localhost:3000) 即可看到结果。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+输入昵称和房间号，或点击随机按钮生成房间号，点击「加入房间」开始实时协同编辑。页面修改可在 `app/page.tsx` 中编辑，保存后自动热更新。
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 构建与部署
 
-## Learn More
+```bash
+npm run build   # 生产构建
+npm start       # 启动生产服务器
+```
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+更详细的 Next.js 部署说明可参考 [Next.js 部署文档](https://nextjs.org/docs/app/building-your-application/deploying)。
